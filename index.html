@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>Fujitsu Si-R series router VPN configuration transrator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+  <style>
+body {
+  height: 100vh;
+}
+  </style>
+</head>
+<body>
+  <div class="d-flex h-auto">
+    <textarea id="generic" rows="20" class="form-control" placeholder="Paste the generic configuration to be translated here"></textarea><br />
+  </div>
+  <div class="d-flex h-auto">
+    <button class="btn btn-warning m-auto">Transrate</button>
+  </div>
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/js/bootstrap.bundle.min.js" integrity="sha384-ygbV9kiqUc6oa4msXn9868pTtWMgiQaeYH7/t7LECLbyPA2x65Kgf80OJFdroafW" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/5.5.2/bootbox.min.js"></script>
+
+<script>
+  $('button').on('click', () => transrate());
+
+  function transrate() {
+    const generic = $("#generic").val();
+    const psk = [...generic.matchAll(/  - Pre-Shared Key           : (.+)/g)];
+    const neighborAddress = [...generic.matchAll(/  - Neighbor IP Address     		  : (.+)/g)];
+    const outsideCustomerGateway = [...generic.matchAll(/  - Customer Gateway 		        : (.+)/g)];
+    const outsiteVirtualPrivateGateway = [...generic.matchAll(/  - Virtual Private Gateway	        : (.+)/g)];
+    const insideCustomerGateway = [...generic.matchAll(/  - Customer Gateway         		: (.+)\/.+/g)];
+    const insideVirtualPrivateGateway = [...generic.matchAll(/  - Virtual Private Gateway             : (.+)\/.+/g)];
+    const virtualPrivateGatewayASN = [...generic.matchAll(/  - Virtual Private  Gateway ASN          : (\d+)/g)];
+    const neighborHoldTime = [...generic.matchAll(/  - Neighbor Hold Time       : (\d+)/g)];
+
+    if (psk.length != 2 || neighborAddress.length != 2
+      || outsideCustomerGateway.length != 2 || outsideCustomerGateway.length != 2
+      || insideCustomerGateway.length != 2 || insideVirtualPrivateGateway.length != 2
+      || virtualPrivateGatewayASN.length != 2 || neighborHoldTime.length != 2)
+    {
+      bootbox.alert("This configuration file is not supported or already transrated.");
+      return;
+    }
+
+    const template = `
+    remote 1 name ipsec1
+    remote 1 ap 0 name ipsec1
+    remote 1 ap 0 datalink type ipsec
+    remote 1 ap 0 ipsec type ike
+    remote 1 ap 0 ipsec ike protocol esp
+    remote 1 ap 0 ipsec ike encrypt aes-cbc-128
+    remote 1 ap 0 ipsec ike auth hmac-sha1
+    remote 1 ap 0 ipsec ike pfs modp1024
+    remote 1 ap 0 ipsec ike lifetime 1h
+    remote 1 ap 0 ipsec ike newsa responder off 0
+    remote 1 ap 0 ike shared key text ${psk[0][1]}
+    remote 1 ap 0 ike proposal 0 encrypt aes-cbc-128
+    remote 1 ap 0 ike proposal 0 hash hmac-sha1
+    remote 1 ap 0 ike proposal 0 pfs modp1024
+    remote 1 ap 0 ike proposal 0 lifetime 8h
+    remote 1 ap 0 ike dpd use on
+    remote 1 ap 0 tunnel local ${outsideCustomerGateway[0][1]}
+    remote 1 ap 0 tunnel remote ${outsiteVirtualPrivateGateway[0][1]}
+    remote 1 ip address local ${insideCustomerGateway[0][1]}
+    remote 1 ip address remote ${insideVirtualPrivateGateway[0][1]}
+    remote 1 ip msschange 1396
+    remote 2 name ipsec2
+    remote 2 ap 0 name ipsec2
+    remote 2 ap 0 datalink type ipsec
+    remote 2 ap 0 ipsec type ike
+    remote 2 ap 0 ipsec ike protocol esp
+    remote 2 ap 0 ipsec ike encrypt aes-cbc-128
+    remote 2 ap 0 ipsec ike auth hmac-sha1
+    remote 2 ap 0 ipsec ike pfs modp1024
+    remote 2 ap 0 ipsec ike lifetime 1h
+    remote 2 ap 0 ipsec ike newsa responder off 0
+    remote 2 ap 0 ike shared key text ${psk[1][1]}
+    remote 2 ap 0 ike proposal 0 encrypt aes-cbc-128
+    remote 2 ap 0 ike proposal 0 hash hmac-sha1
+    remote 2 ap 0 ike proposal 0 pfs modp1024
+    remote 2 ap 0 ike proposal 0 lifetime 8h
+    remote 2 ap 0 ike dpd use on
+    remote 2 ap 0 tunnel local ${outsideCustomerGateway[1][1]}
+    remote 2 ap 0 tunnel remote ${outsiteVirtualPrivateGateway[1][1]}
+    remote 2 ip address local ${insideCustomerGateway[1][1]}
+    remote 2 ip address remote ${insideVirtualPrivateGateway[1][1]}
+    remote 2 ip msschange 1396
+    routemanage ip redist bgp static on
+    routemanage ip redist bgp connected on
+    bgp as 0.65000
+    bgp neighbor 0 address ${insideVirtualPrivateGateway[0][1]}
+    bgp neighbor 0 as 0.${virtualPrivateGatewayASN[0][1]}
+    bgp neighbor 0 timers 10s ${neighborHoldTime[0][1]}s
+    bgp neighbor 0 source ${insideCustomerGateway[0][1]}
+    bgp neighbor 1 address ${insideVirtualPrivateGateway[1][1]}
+    bgp neighbor 1 as 0.${virtualPrivateGatewayASN[1][1]}
+    bgp neighbor 1 timers 10s ${neighborHoldTime[1][1]}s
+    bgp neighbor 1 source ${insideCustomerGateway[1][1]}
+    `;
+
+    $("#generic").val(template);
+  }
+</script>
+</body>
+</html>
